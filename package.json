@@ -1,0 +1,11 @@
+{
+  "name": "chess-clock-trainer-webapp",
+  "version": "1.0.0",
+  "description": "Offline single-file chess clock trainer: per-move par counters, time-trouble wake-ups, blink-and-think endgame chair, localStorage setup profiles.",
+  "private": true,
+  "scripts": {
+    "test": "node tests/run-tests.mjs && node tests/smoke-app.mjs"
+  },
+  "license": "MIT",
+  "author": "Asdale Dynamics, LLC"
+}

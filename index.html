@@ -1,0 +1,942 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chess Clock Trainer</title>
+<style>
+  :root {
+    --bg: #12141a;
+    --panel: #1c2029;
+    --panel-2: #232834;
+    --ink: #e8ecf3;
+    --ink-dim: #98a2b3;
+    --accent: #4ba3e3;
+    --good: #46c48a;
+    --warn: #e6b23c;
+    --bad: #e05656;
+    --white-side: #f4f1ea;
+    --black-side: #181a1f;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    background: var(--panel);
+    border-bottom: 1px solid #2c323f;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  header h1 { font-size: 1.05rem; margin: 0; font-weight: 650; letter-spacing: 0.3px; }
+  nav { display: flex; gap: 4px; }
+  nav button {
+    background: transparent;
+    color: var(--ink-dim);
+    border: 0;
+    font: inherit;
+    padding: 7px 14px;
+    border-radius: 999px;
+    cursor: pointer;
+  }
+  nav button.active { background: var(--panel-2); color: var(--ink); }
+  nav button:hover { color: var(--ink); }
+
+  main { flex: 1; padding: 14px; max-width: 860px; width: 100%; margin: 0 auto; }
+  .tab { display: none; }
+  .tab.active { display: block; }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid #2c323f;
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 14px;
+  }
+  .card h2 { margin: 0 0 12px; font-size: 0.95rem; color: var(--ink-dim); font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: 0.75rem; color: var(--ink-dim); text-transform: uppercase; letter-spacing: 0.6px; }
+  .field input {
+    background: var(--panel-2);
+    border: 1px solid #333a48;
+    color: var(--ink);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font: inherit;
+    width: 90px;
+  }
+  .field input:focus { outline: 2px solid var(--accent); border-color: transparent; }
+
+  button.primary {
+    background: var(--accent);
+    color: #0d1520;
+    border: 0;
+    font: inherit;
+    font-weight: 600;
+    padding: 10px 18px;
+    border-radius: 10px;
+    cursor: pointer;
+  }
+  button.secondary {
+    background: var(--panel-2);
+    color: var(--ink);
+    border: 1px solid #333a48;
+    font: inherit;
+    padding: 10px 18px;
+    border-radius: 10px;
+    cursor: pointer;
+  }
+  button.danger {
+    background: transparent;
+    color: var(--bad);
+    border: 1px solid #4b3030;
+    font: inherit;
+    padding: 10px 18px;
+    border-radius: 10px;
+    cursor: pointer;
+  }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  .clockboard { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  .side {
+    border-radius: var(--radius);
+    border: 2px solid #2c323f;
+    padding: 18px 14px;
+    text-align: center;
+    cursor: pointer;
+    user-select: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .side .who { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 2px; color: var(--ink-dim); }
+  .side .time { font-size: clamp(2.2rem, 9vw, 3.6rem); font-weight: 700; font-variant-numeric: tabular-nums; margin: 8px 0 4px; }
+  .side .moves { font-size: 0.85rem; color: var(--ink-dim); min-height: 1.2em; }
+  .side .parline { font-size: 0.85rem; margin-top: 4px; min-height: 1.2em; }
+  .side.white { background: var(--white-side); color: #1b1d22; }
+  .side.white .who, .side.white .moves { color: #6b6f78; }
+  .side.white .parline.drift-behind { color: #a33c3c; }
+  .side.white .parline.drift-ahead { color: #1d7a4c; }
+  .side.black { background: var(--black-side); color: var(--ink); }
+  .side.black.parline, .side.black .parline { color: var(--ink-dim); }
+  .side.black .parline.drift-behind { color: #ff9b9b; }
+  .side.black .parline.drift-ahead { color: #7fe0ae; }
+  .side.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 0 24px rgba(75, 163, 227, 0.25); }
+  .side.wake { animation: pulse 1s steps(1) infinite; }
+  .side.critical { animation: pulse 0.4s steps(1) infinite; }
+  @keyframes pulse { 0% { border-color: var(--warn); box-shadow: 0 0 0 2px var(--warn); } 50% { border-color: #2c323f; box-shadow: none; } }
+  .side.flagged { border-color: var(--bad); }
+  .time.low { color: var(--bad); }
+
+  .banner {
+    border-radius: 10px;
+    padding: 10px 14px;
+    margin-bottom: 12px;
+    text-align: center;
+    font-weight: 600;
+    display: none;
+  }
+  .banner.show { display: block; }
+  .banner.win { background: #223a2e; color: var(--good); }
+  .banner.info { background: #20303f; color: var(--accent); }
+
+  .toolbar { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; padding: 4px 0 14px; }
+  kbd {
+    background: var(--panel-2);
+    border: 1px solid #333a48;
+    border-bottom-width: 2px;
+    border-radius: 5px;
+    padding: 1px 6px;
+    font-size: 0.78rem;
+    font-family: ui-monospace, monospace;
+  }
+  .hint { color: var(--ink-dim); font-size: 0.85rem; text-align: center; }
+  .hint code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; }
+
+  .profile-list { list-style: none; margin: 10px 0 0; padding: 0; }
+  .profile-list li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--panel-2);
+    border: 1px solid #333a48;
+    border-radius: 10px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+  }
+  .profile-list .pname { font-weight: 600; flex: 1; min-width: 120px; }
+  .profile-list .pdetail { font-size: 0.82rem; color: var(--ink-dim); flex-basis: 100%; }
+  .profile-list button { padding: 6px 12px; border-radius: 8px; }
+  .empty { color: var(--ink-dim); font-size: 0.9rem; }
+  .status-ok { color: var(--good); }
+  .status-bad { color: var(--bad); }
+  #savedmsg { font-size: 0.85rem; margin-left: 8px; }
+
+  .chair-stage { text-align: center; padding: 10px 0; }
+  .chair-phase { font-size: clamp(2rem, 8vw, 3.2rem); font-weight: 800; letter-spacing: 4px; min-height: 1.3em; }
+  .chair-phase.blink { color: var(--warn); }
+  .chair-phase.think { color: var(--accent); }
+  .chair-phase.rest { color: var(--good); }
+  .chair-count { font-size: clamp(2.6rem, 11vw, 4.4rem); font-weight: 700; font-variant-numeric: tabular-nums; }
+  .chair-round { color: var(--ink-dim); margin-top: 6px; }
+  .drill-note { color: var(--ink-dim); font-size: 0.88rem; }
+</style>
+</head>
+<body>
+<header>
+  <h1>&#9822; Chess Clock Trainer</h1>
+  <nav>
+    <button id="tab-clock" class="active">Clock</button>
+    <button id="tab-profiles">Profiles</button>
+    <button id="tab-drills">Drills</button>
+  </nav>
+</header>
+<main>
+  <!-- CLOCK TAB -->
+  <section id="view-clock" class="tab active">
+    <div id="resultBanner" class="banner"></div>
+    <div class="clockboard">
+      <div id="side-white" class="side white" title="Click to hand over / press Space">
+        <div class="who">White</div>
+        <div class="time" id="time-w">10:00</div>
+        <div class="moves" id="moves-w"></div>
+        <div class="parline" id="par-w"></div>
+      </div>
+      <div id="side-black" class="side black" title="Click to hand over / press Space">
+        <div class="who">Black</div>
+        <div class="time" id="time-b">10:00</div>
+        <div class="moves" id="moves-b"></div>
+        <div class="parline" id="par-b"></div>
+      </div>
+    </div>
+    <div class="toolbar">
+      <button id="btn-start" class="primary">Start</button>
+      <button id="btn-pause" class="secondary" disabled>Pause</button>
+      <button id="btn-reset" class="secondary">Reset</button>
+    </div>
+    <div class="card">
+      <h2>Pace &amp; wake-up</h2>
+      <div class="row">
+        <div class="field">
+          <label for="set-par">Par / move (s)</label>
+          <input id="set-par" type="number" min="1" max="600" value="30">
+        </div>
+        <button id="btn-par-toggle" class="secondary">Par mode: Off</button>
+        <div class="separator" style="width:14px"></div>
+        <div class="field">
+          <label for="set-wake">Wake at (s)</label>
+          <input id="set-wake" type="number" min="0" max="600" value="30">
+        </div>
+        <div class="field">
+          <label for="set-crit">Critical at (s)</label>
+          <input id="set-crit" type="number" min="0" max="300" value="10">
+        </div>
+        <button id="btn-sound" class="secondary">Sound: On</button>
+      </div>
+      <p class="hint">Par mode tracks each move against your per-move budget. Wake-ups beep shortly before brute-o'clock.</p>
+    </div>
+    <p class="hint"><kbd>Space</kbd> switch clock &middot; <kbd>P</kbd> pause &middot; <kbd>R</kbd> reset &middot; tap the active side to move &mdash; increment goes to the player who just moved.</p>
+  </section>
+
+  <!-- PROFILES TAB -->
+  <section id="view-profiles" class="tab">
+    <div class="card">
+      <h2>Everything stays on this device</h2>
+      <p class="drill-note">Profiles live in your browser's localStorage. No accounts, no network, nothing leaves this window.</p>
+    </div>
+    <div class="card">
+      <h2>New profile</h2>
+      <div class="row">
+        <div class="field"><label for="prof-name">Name</label><input id="prof-name" type="text" maxlength="40" placeholder="5+3 blitz"></div>
+        <div class="field"><label for="prof-min">Minutes</label><input id="prof-min" type="number" min="1" max="180" value="5"></div>
+        <div class="field"><label for="prof-inc">Increment (s)</label><input id="prof-inc" type="number" min="0" max="60" value="3"></div>
+        <div class="field"><label for="prof-par">Par / move (s)</label><input id="prof-par" type="number" min="1" max="600" value="15"></div>
+        <button id="btn-save-profile" class="primary">Save</button>
+        <span id="savedmsg" class="drill-note"></span>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Saved profiles</h2>
+      <ul id="profile-list" class="profile-list"></ul>
+      <p id="profile-empty" class="empty" style="display:none">No profiles yet. Save one above and it will appear here, ready to load next session.</p>
+    </div>
+  </section>
+
+  <!-- DRILLS TAB -->
+  <section id="view-drills" class="tab">
+    <div class="card">
+      <h2>Blink-and-think endgame chair</h2>
+      <p class="drill-note">Train endgame pace away from the board: a short <strong>Blink</strong> window for your gut first idea &mdash; king activity, the one candidate move &mdash; then a longer <strong>Think</strong> window to calculate it. Beeps mark each switch. Sit, breathe, repeat.</p>
+      <div class="row" style="margin-top:12px">
+        <div class="field"><label for="dr-blink">Blink (s)</label><input id="dr-blink" type="number" min="1" max="30" value="3"></div>
+        <div class="field"><label for="dr-think">Think (s)</label><input id="dr-think" type="number" min="2" max="120" value="12"></div>
+        <div class="field"><label for="dr-rounds">Rounds</label><input id="dr-rounds" type="number" min="1" max="50" value="8"></div>
+        <button id="btn-chair" class="primary">Start</button>
+      </div>
+      <div class="chair-stage" id="chair-stage">
+        <div class="chair-phase rest" id="chair-phase">READY</div>
+        <div class="chair-count" id="chair-count">&mdash;</div>
+        <div class="chair-round" id="chair-round">round 0 / 8</div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Other drills live in the clock</h2>
+      <p class="drill-note"><strong>Par counters</strong> and <strong>time-trouble wake-ups</strong> are built into the Clock tab &mdash; set your par and thresholds there, then play real games against the trainer clock and watch your drift per move.</p>
+    </div>
+  </section>
+</main>
+
+<script>
+// === CORE BEGIN =============================================
+// Pure, framework-free logic shared by the app and the test suite.
+
+var PAR_TOLERANCE_MS = 500;
+
+function computeMoveAverage(movesCompleted, totalElapsedMs) {
+  if (typeof movesCompleted !== 'number' || typeof totalElapsedMs !== 'number') return null;
+  if (!Number.isFinite(movesCompleted) || !Number.isFinite(totalElapsedMs)) return null;
+  if (movesCompleted <= 0) return null;
+  if (totalElapsedMs < 0) totalElapsedMs = 0;
+  return totalElapsedMs / movesCompleted;
+}
+
+function computeParDrift(parMs, averageMs) {
+  if (typeof parMs !== 'number' || typeof averageMs !== 'number') return null;
+  if (!Number.isFinite(parMs) || !Number.isFinite(averageMs)) return null;
+  return averageMs - parMs;
+}
+
+function computeParStatus(driftMs, toleranceMs) {
+  var tol = typeof toleranceMs === 'number' ? toleranceMs : PAR_TOLERANCE_MS;
+  if (typeof driftMs !== 'number' || !Number.isFinite(driftMs)) return 'no-data';
+  if (driftMs > tol) return 'behind';
+  if (driftMs < -tol) return 'ahead';
+  return 'on-pace';
+}
+
+function summarizePar(options) {
+  var opts = options || {};
+  var parMs = typeof opts.parMs === 'number' ? opts.parMs : null;
+  if (parMs === null || !Number.isFinite(parMs) || parMs <= 0) return null;
+  var moves = typeof opts.movesCompleted === 'number' && opts.movesCompleted > 0
+    ? Math.floor(opts.movesCompleted) : 0;
+  var elapsed = typeof opts.elapsedMs === 'number' && opts.elapsedMs > 0 ? opts.elapsedMs : 0;
+  var avgMs = computeMoveAverage(moves, elapsed);
+  var driftMs = avgMs === null ? null : computeParDrift(parMs, avgMs);
+  return {
+    movesCompleted: moves,
+    averageMs: avgMs,
+    driftMs: driftMs,
+    status: computeParStatus(driftMs, opts.toleranceMs),
+    expectedTotalMs: parMs * moves
+  };
+}
+
+function describeParStatus(status) {
+  if (status === 'ahead') return 'ahead of par';
+  if (status === 'behind') return 'behind par';
+  if (status === 'on-pace') return 'on pace';
+  return 'no pace data yet';
+}
+
+function clampInt(value, min, max, fallback) {
+  var n = Math.round(typeof value === 'number' ? value : Number(value));
+  if (!Number.isFinite(n)) return fallback;
+  if (n < min) return min;
+  if (n > max) return max;
+  return n;
+}
+
+function sanitizeProfile(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  var name = typeof raw.name === 'string' ? raw.name.trim().slice(0, 40) : '';
+  if (!name) return null;
+  var minutes = clampInt(raw.minutes, 1, 180, NaN);
+  var increment = clampInt(raw.increment, 0, 60, NaN);
+  var parSeconds = clampInt(raw.parSeconds, 1, 600, NaN);
+  var wakeSeconds = clampInt(raw.wakeSeconds, 0, 600, NaN);
+  var criticalSeconds = clampInt(raw.criticalSeconds, 0, 300, NaN);
+  if (!Number.isFinite(minutes) || !Number.isFinite(increment) ||
+      !Number.isFinite(parSeconds) || !Number.isFinite(wakeSeconds) ||
+      !Number.isFinite(criticalSeconds)) {
+    return null;
+  }
+  return {
+    name: name,
+    minutes: minutes,
+    increment: increment,
+    parSeconds: parSeconds,
+    wakeSeconds: wakeSeconds,
+    criticalSeconds: criticalSeconds
+  };
+}
+
+function makeProfileId(nowMs) {
+  var cryptoApi = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto : null;
+  if (cryptoApi && typeof cryptoApi.randomUUID === 'function') return cryptoApi.randomUUID();
+  var base = typeof nowMs === 'number' ? Math.floor(nowMs) : Date.now();
+  return 'p-' + base.toString(36) + '-' + Math.floor(Math.random() * 1e8).toString(36);
+}
+
+function createProfileStore(storage, key) {
+  var storageKey = typeof key === 'string' && key ? key : 'profiles';
+  function load() {
+    var list = [];
+    try {
+      var text = storage.getItem(storageKey);
+      if (!text) return [];
+      var parsed = JSON.parse(text);
+      if (!Array.isArray(parsed)) return [];
+      for (var i = 0; i < parsed.length; i++) {
+        var clean = sanitizeProfile(parsed[i]);
+        if (clean && typeof parsed[i].id === 'string' && parsed[i].id) {
+          clean.id = parsed[i].id;
+          clean.createdAt = typeof parsed[i].createdAt === 'number' ? parsed[i].createdAt : Date.now();
+          clean.updatedAt = typeof parsed[i].updatedAt === 'number' ? parsed[i].updatedAt : clean.createdAt;
+          list.push(clean);
+        }
+      }
+    } catch (err) {
+      return [];
+    }
+    return list;
+  }
+  function persist(list) {
+    try {
+      storage.setItem(storageKey, JSON.stringify(list));
+      return true;
+    } catch (err) {
+      return false;
+    }
+  }
+  return {
+    list: load,
+    get: function (id) {
+      var list = load();
+      for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
+      return null;
+    },
+    save: function (profile) {
+      var clean = sanitizeProfile(profile);
+      if (!clean) return null;
+      var list = load();
+      var id = typeof profile.id === 'string' && profile.id ? profile.id : makeProfileId(Date.now());
+      var now = Date.now();
+      var item = clean;
+      item.id = id;
+      for (var i = 0; i < list.length; i++) {
+        if (list[i].id === id) {
+          item.createdAt = list[i].createdAt;
+          break;
+        }
+      }
+      if (item.createdAt === undefined) item.createdAt = now;
+      item.updatedAt = now;
+      var replaced = false;
+      for (var j = 0; j < list.length; j++) {
+        if (list[j].id === id) {
+          list[j] = item;
+          replaced = true;
+          break;
+        }
+      }
+      if (!replaced) list.push(item);
+      return persist(list) ? item : null;
+    },
+    remove: function (id) {
+      var list = load();
+      var next = [];
+      var removed = false;
+      for (var i = 0; i < list.length; i++) {
+        if (list[i].id === id) { removed = true; continue; }
+        next.push(list[i]);
+      }
+      if (!removed) return false;
+      return persist(next);
+    }
+  };
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    PAR_TOLERANCE_MS: PAR_TOLERANCE_MS,
+    computeMoveAverage: computeMoveAverage,
+    computeParDrift: computeParDrift,
+    computeParStatus: computeParStatus,
+    summarizePar: summarizePar,
+    describeParStatus: describeParStatus,
+    sanitizeProfile: sanitizeProfile,
+    makeProfileId: makeProfileId,
+    createProfileStore: createProfileStore
+  };
+}
+// === CORE END ===============================================
+
+// --- App wiring (browser only) ---
+(function () {
+  if (typeof document === 'undefined' || !document.getElementById) return;
+  if (!window.localStorage) return;
+
+  var $ = function (id) { return document.getElementById(id); };
+  var PROFILE_KEY = 'cct.profiles.v1';
+  var SETTINGS_KEY = 'cct.settings.v1';
+
+  // ---- audio ----
+  var audioCtx = null;
+  function beep(freq, durationMs, gain) {
+    if (!state.soundOn) return;
+    try {
+      if (!audioCtx) {
+        var AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return;
+        audioCtx = new AC();
+      }
+      if (audioCtx.state === 'suspended' && audioCtx.resume) audioCtx.resume();
+      var t0 = audioCtx.currentTime;
+      var osc = audioCtx.createOscillator();
+      var g = audioCtx.createGain();
+      osc.type = 'square';
+      osc.frequency.value = freq;
+      g.gain.value = gain || 0.06;
+      osc.connect(g);
+      g.connect(audioCtx.destination);
+      osc.start(t0);
+      osc.stop(t0 + (durationMs || 120) / 1000);
+    } catch (e) { /* audio is best-effort */ }
+  }
+  function wakeBeep() { beep(760, 160, 0.07); }
+  function criticalBeep() { beep(1100, 90, 0.08); }
+  function phaseBeep(hi) { beep(hi ? 880 : 520, 140, 0.07); }
+
+  // ---- clock state ----
+  var state = {
+    minutes: 5,
+    increment: 3,
+    parSeconds: 30,
+    parMode: false,
+    wakeSeconds: 30,
+    criticalSeconds: 10,
+    soundOn: true,
+    active: null,            // 0 white, 1 black, null idle
+    running: false,
+    paused: false,
+    flagged: null,
+    lastTick: 0,
+    players: null,
+    alarmLevel: [0, 0]       // 0 normal, 1 wake, 2 critical
+  };
+
+  function freshPlayers() {
+    return [
+      side('White'), side('Black')
+    ];
+    function side(name) {
+      return { name: name, timeMs: state.minutes * 60000, moveElapsedMs: 0, moveCount: 0, totalMoveElapsedMs: 0 };
+    }
+  }
+
+  function fmt(ms) {
+    ms = Math.max(0, ms);
+    var totalSec = Math.ceil(ms / 1000);
+    var h = Math.floor(totalSec / 3600);
+    var m = Math.floor((totalSec % 3600) / 60);
+    var s = totalSec % 60;
+    var mm = String(h > 0 ? m + h * 60 : m).padStart(2, '0');
+    return (h > 0 ? h + ':' : '') + mm + ':' + String(s).padStart(2, '0');
+  }
+  function fmtSignedSeconds(ms) {
+    var sign = ms >= 0 ? '+' : '\u2212';
+    var s = Math.abs(ms) / 1000;
+    return sign + s.toFixed(s < 10 ? 1 : 0) + 's';
+  }
+
+  function tick() {
+    if (!state.running || state.paused || state.active === null || state.flagged !== null) {
+      state.lastTick = performance.now();
+      return;
+    }
+    var now = performance.now();
+    var delta = now - state.lastTick;
+    state.lastTick = now;
+    var p = state.players[state.active];
+    p.timeMs -= delta;
+    p.moveElapsedMs += delta;
+    checkAlarms(delta);
+    if (p.timeMs <= 0) {
+      p.timeMs = 0;
+      flag(state.active);
+    }
+    render();
+  }
+
+  function checkAlarms(delta) {
+    var s = state;
+    [0, 1].forEach(function (i) {
+      if (s.flagged !== null || !s.running || s.paused || s.active !== i) { return; }
+      var t = s.players[i].timeMs / 1000;
+      var level = t <= s.criticalSeconds && s.criticalSeconds > 0 ? 2
+                : (t <= s.wakeSeconds && s.wakeSeconds > 0 ? 1 : 0);
+      var prev = s.alarmLevel[i];
+      if (level > prev) {
+        s.alarmLevel[i] = level;
+        if (i === s.active) {
+          if (level === 1) { wakeBeep(); }
+          if (level === 2) { criticalBeep(); }
+        }
+      } else if (level < prev) {
+        s.alarmLevel[i] = level;
+      }
+      if (level === 2 && i === s.active) {
+        // steady heartbeat while in critical
+        s._critAccum = (s._critAccum || 0) + delta;
+        if (s._critAccum >= 1000) { s._critAccum = 0; criticalBeep(); }
+      } else if (i !== s.active) {
+        s._critAccum = 0;
+      }
+    });
+  }
+
+  function flag(sideIndex) {
+    state.flagged = sideIndex;
+    state.active = null;
+    state.running = false;
+    $('btn-start').disabled = false;
+    $('btn-pause').disabled = true;
+    var winner = sideIndex === 0 ? 'Black' : 'White';
+    var banner = $('resultBanner');
+    banner.textContent = (sideIndex === 0 ? 'White' : 'Black') + ' flagged \u2014 ' + winner + ' wins on time.';
+    banner.className = 'banner win show';
+    beep(220, 500, 0.09);
+    render();
+  }
+
+  function switchClock() {
+    if (state.flagged !== null || !state.running) return;
+    if (state.active === null) { state.active = 0; state.running = true; state.paused = false; state.lastTick = performance.now(); render(); return; }
+    var mover = state.players[state.active];
+    mover.timeMs += state.increment * 1000;
+    mover.moveCount += 1;
+    mover.totalMoveElapsedMs += mover.moveElapsedMs;
+    mover.moveElapsedMs = 0;
+    state.active = state.active === 0 ? 1 : 0;
+    state.lastTick = performance.now();
+    render();
+  }
+
+  function start() {
+    if (state.flagged !== null) return;
+    state.running = true;
+    state.paused = false;
+    if (state.active === null) state.active = 0;
+    state.lastTick = performance.now();
+    $('btn-start').disabled = true;
+    $('btn-pause').disabled = false;
+    $('resultBanner').className = 'banner';
+    beep(660, 100, 0.05);
+    render();
+  }
+
+  function pause() {
+    if (!state.running || state.flagged !== null) return;
+    state.paused = !state.paused;
+    $('btn-start').disabled = !state.paused;
+    $('btn-pause').disabled = !state.paused;
+    $('btn-pause').textContent = state.paused ? 'Resume' : 'Pause';
+    if (!state.paused) state.lastTick = performance.now();
+    render();
+  }
+
+  function reset() {
+    state.active = null;
+    state.running = false;
+    state.paused = false;
+    state.flagged = null;
+    state.alarmLevel = [0, 0];
+    state._critAccum = 0;
+    state.players = freshPlayers();
+    $('btn-start').disabled = false;
+    $('btn-pause').disabled = true;
+    $('btn-pause').textContent = 'Pause';
+    $('resultBanner').className = 'banner';
+    render();
+  }
+
+  function render() {
+    [0, 1].forEach(function (i) {
+      var el = $(i === 0 ? 'side-white' : 'side-black');
+      var p = state.players[i];
+      var timeEl = $(i === 0 ? 'time-w' : 'time-b');
+      timeEl.textContent = fmt(p.timeMs);
+      var low = p.timeMs <= state.criticalSeconds * 1000 && p.timeMs > 0;
+      timeEl.className = 'time' + (low ? ' low' : '');
+      if (state.parMode) {
+        $(i === 0 ? 'moves-w' : 'moves-b').textContent = 'Move ' + (p.moveCount + (i === state.active && state.running ? 1 : 0)) +
+          ' \u00b7 this move ' + (p.moveElapsedMs / 1000).toFixed(1) + 's';
+        var sum = summarizePar({ parMs: state.parSeconds * 1000, movesCompleted: p.moveCount, elapsedMs: p.totalMoveElapsedMs });
+        var parEl = $(i === 0 ? 'par-w' : 'par-b');
+        if (!sum || sum.movesCompleted === 0) {
+          parEl.textContent = 'par ' + state.parSeconds + 's/move';
+          parEl.className = 'parline';
+        } else {
+          var label = fmtSignedSeconds(sum.driftMs) + ' / move \u00b7 ' + describeParStatus(sum.status);
+          parEl.textContent = 'par ' + label;
+          parEl.className = 'parline drift-' + (sum.status === 'ahead' ? 'ahead' : sum.status === 'behind' ? 'behind' : 'on');
+        }
+      } else {
+        $(i === 0 ? 'moves-w' : 'moves-b').textContent = 'Move ' + p.moveCount;
+        $(i === 0 ? 'par-w' : 'par-b').textContent = '';
+      }
+      var sideEl = $(i === 0 ? 'side-white' : 'side-black');
+      var cls = ['side', i === 0 ? 'white' : 'black'];
+      if (state.active === i && state.running && !state.paused) cls.push('active');
+      var lvl = state.alarmLevel[i];
+      if (lvl === 2) cls.push('critical'); else if (lvl === 1) cls.push('wake');
+      if (state.flagged === i) cls.push('flagged');
+      sideEl.className = cls.join(' ');
+    });
+  }
+
+  function applyProfile(p) {
+    state.minutes = p.minutes;
+    state.increment = p.increment;
+    state.parSeconds = p.parSeconds;
+    state.wakeSeconds = p.wakeSeconds;
+    state.criticalSeconds = p.criticalSeconds;
+    $('set-par').value = p.parSeconds;
+    $('set-wake').value = p.wakeSeconds;
+    $('set-crit').value = p.criticalSeconds;
+    reset();
+  }
+
+  // ---- settings persistence ----
+  function readSettings() {
+    try {
+      var s = JSON.parse(localStorage.getItem(SETTINGS_KEY));
+      if (!s || typeof s !== 'object') return;
+      ['minutes', 'increment', 'parSeconds', 'wakeSeconds', 'criticalSeconds'].forEach(function (k) {
+        if (typeof s[k] === 'number') state[k] = s[k];
+      });
+      if (typeof s.parMode === 'boolean') state.parMode = s.parMode;
+      if (typeof s.soundOn === 'boolean') state.soundOn = s.soundOn;
+    } catch (e) { }
+  }
+  function writeSettings() {
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify({
+        minutes: state.minutes, increment: state.increment, parMode: state.parMode,
+        parSeconds: state.parSeconds, wakeSeconds: state.wakeSeconds,
+        criticalSeconds: state.criticalSeconds, soundOn: state.soundOn
+      }));
+    } catch (e) { }
+  }
+
+  // ---- tabs ----
+  [['tab-clock', 'view-clock'], ['tab-profiles', 'view-profiles'], ['tab-drills', 'view-drills']]
+    .forEach(function (pair) {
+      $(pair[0]).addEventListener('click', function () {
+        document.querySelectorAll('nav button').forEach(function (b) { b.classList.remove('active'); });
+        document.querySelectorAll('.tab').forEach(function (t) { t.classList.remove('active'); });
+        $(pair[0]).classList.add('active');
+        $(pair[1]).classList.add('active');
+      });
+    });
+
+  // ---- clock controls ----
+  $('side-white').addEventListener('click', switchClock);
+  $('side-black').addEventListener('click', switchClock);
+  $('btn-start').addEventListener('click', start);
+  $('btn-pause').addEventListener('click', pause);
+  $('btn-reset').addEventListener('click', reset);
+  $('btn-par-toggle').addEventListener('click', function () {
+    state.parMode = !state.parMode;
+    this.textContent = 'Par mode: ' + (state.parMode ? 'On' : 'Off');
+    writeSettings();
+    render();
+  });
+  ['set-par', 'set-wake', 'set-crit'].forEach(function (id, idx) {
+    var keys = ['parSeconds', 'wakeSeconds', 'criticalSeconds'];
+    var ranges = [[1, 600], [0, 600], [0, 300]];
+    $(id).addEventListener('change', function () {
+      state[keys[idx]] = clampInt(parseFloat(this.value), ranges[idx][0], ranges[idx][1], state[keys[idx]]);
+      this.value = state[keys[idx]];
+      writeSettings();
+      render();
+    });
+  });
+  $('btn-sound').addEventListener('click', function () {
+    state.soundOn = !state.soundOn;
+    this.textContent = 'Sound: ' + (state.soundOn ? 'On' : 'Off');
+    writeSettings();
+    if (state.soundOn) beep(660, 80, 0.05);
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.target && /INPUT|TEXTAREA/.test(e.target.tagName)) return;
+    if (e.code === 'Space') { e.preventDefault(); switchClock(); }
+    else if (e.key === 'p' || e.key === 'P') { pause(); }
+    else if (e.key === 'r' || e.key === 'R') { reset(); }
+  });
+  setInterval(tick, 100);
+
+  // ---- profiles ----
+  var store = createProfileStore(window.localStorage, PROFILE_KEY);
+
+  function flashSaved(msg, ok) {
+    var el = $('savedmsg');
+    el.textContent = msg;
+    el.className = ok ? 'status-ok drill-note' : 'status-bad drill-note';
+    setTimeout(function () { el.textContent = ''; }, 2500);
+  }
+
+  $('btn-save-profile').addEventListener('click', function () {
+    var current = {
+      name: $('prof-name').value,
+      minutes: state.minutes,
+      increment: state.increment,
+      parSeconds: state.parSeconds,
+      wakeSeconds: state.wakeSeconds,
+      criticalSeconds: state.criticalSeconds
+    };
+    var saved = store.save({
+      name: $('prof-name').value,
+      minutes: parseFloat($('prof-min').value) || 5,
+      increment: parseFloat($('prof-inc').value),
+      parSeconds: parseFloat($('prof-par').value) || state.parSeconds,
+      wakeSeconds: state.wakeSeconds,
+      criticalSeconds: state.criticalSeconds
+    });
+    if (saved) {
+      state.minutes = saved.minutes;
+      state.increment = saved.increment;
+      state.parSeconds = saved.parSeconds;
+      $('prof-name').value = '';
+      $('prof-min').value = saved.minutes;
+      $('prof-inc').value = saved.increment;
+      $('prof-par').value = saved.parSeconds;
+      writeSettings();
+      reset();
+      flashSaved('Saved "' + saved.name + '"', true);
+      renderProfiles();
+    } else {
+      flashSaved('Could not save \u2014 check the fields', false);
+    }
+  });
+
+  function renderProfiles() {
+    var list = store.list();
+    var ul = $('profile-list');
+    ul.innerHTML = '';
+    $('profile-empty').style.display = list.length ? 'none' : 'block';
+    list.forEach(function (p) {
+      var li = document.createElement('li');
+      var label = document.createElement('span');
+      label.className = 'pname';
+      label.textContent = p.name;
+      var detail = document.createElement('span');
+      detail.className = 'pdetail';
+      detail.textContent = p.minutes + ' min +' + p.increment + 's \u00b7 par ' + p.parSeconds + 's \u00b7 wake ' + p.wakeSeconds + 's / critical ' + p.criticalSeconds + 's';
+      var use = document.createElement('button');
+      use.className = 'primary';
+      use.textContent = 'Load';
+      use.addEventListener('click', function () {
+        applyProfile(p);
+        writeSettings();
+        document.getElementById('tab-clock').click();
+      });
+      var del = document.createElement('button');
+      del.className = 'danger';
+      del.textContent = 'Delete';
+      del.addEventListener('click', function () { store.remove(p.id); renderProfiles(); });
+      li.appendChild(label);
+      li.appendChild(use);
+      li.appendChild(del);
+      li.appendChild(detail);
+      ul.appendChild(li);
+    });
+  }
+
+  // ---- blink-and-think chair ----
+  var chair = { timer: null, phase: 'rest', remaining: 0, round: 0, rounds: 0, blinkS: 3, thinkS: 12 };
+  function chairRender() {
+    var labels = { blink: 'BLINK', think: 'THINK', rest: 'PAUSED' };
+    var ph = $('chair-phase');
+    ph.textContent = chair.timer ? labels[chair.phase] : 'READY';
+    ph.className = 'chair-phase ' + chair.phase;
+    $('chair-count').textContent = chair.timer ? Math.ceil(chair.remaining / 1000) : '\u2014';
+    $('chair-round').textContent = 'round ' + chair.round + ' / ' + chair.rounds;
+  }
+  function chairTick() {
+    chair.remaining -= 100;
+    if (chair.remaining <= 0) {
+      if (chair.phase === 'blink') {
+        chair.phase = 'think';
+        chair.remaining = chair.thinkS * 1000;
+        phaseBeep(true);
+      } else if (chair.phase === 'think') {
+        if (chair.round >= chair.rounds) {
+          stopChair();
+          $('chair-phase').textContent = 'DONE';
+          $('chair-count').textContent = '\u2014';
+          beep(880, 400, 0.08);
+          return;
+        }
+        chair.phase = 'blink';
+        chair.round += 1;
+        chair.remaining = chair.blinkS * 1000;
+        phaseBeep(false);
+      }
+    }
+    chairRender();
+  }
+  function stopChair() {
+    if (chair.timer) { clearInterval(chair.timer); chair.timer = null; }
+    if (chair.phase !== 'rest' && document.getElementById('chair-phase').textContent !== 'SHOW') {
+      $('btn-chair').textContent = 'Start';
+      chair.phase = 'rest';
+      chairRender();
+    }
+  }
+  $('btn-chair').addEventListener('click', function () {
+    if (chair.timer) { stopChair(); return; }
+    chair.blinkS = clampInt(parseFloat($('dr-blink').value), 1, 30, 3);
+    chair.thinkS = clampInt(parseFloat($('dr-think').value), 2, 120, 12);
+    chair.rounds = clampInt(parseFloat($('dr-rounds').value), 1, 50, 8);
+    $('dr-blink').value = chair.blinkS;
+    $('dr-think').value = chair.thinkS;
+    $('dr-rounds').value = chair.rounds;
+    chair.phase = 'blink';
+    chair.round = 1;
+    chair.remaining = chair.blinkS * 1000;
+    this.textContent = 'Stop';
+    beep(520, 140, 0.07);
+    chair.timer = setInterval(chairTick, 100);
+    chairRender();
+  });
+
+  // ---- boot ----
+  readSettings();
+  state.players = freshPlayers();
+  if (!$('set-par').value) $('set-par').value = state.parSeconds;
+  $('set-par').value = state.parSeconds;
+  $('set-wake').value = state.wakeSeconds;
+  $('set-crit').value = state.criticalSeconds;
+  $('btn-par-toggle').textContent = 'Par mode: ' + (state.parMode ? 'On' : 'Off');
+  $('btn-sound').textContent = 'Sound: ' + (state.soundOn ? 'On' : 'Off');
+  render();
+  renderProfiles();
+  chairRender();
+})();
+</script>
+</body>
+</html>
